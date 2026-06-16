@@ -1,72 +1,43 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef } from 'react'
 
 export default function RecordingPanel({
   isTeacherActive,
   onToggleTeacher,
   transcript,
   isListening,
-  bufferLength,
+  bufferWords,
+  silenceSeconds,
+  silenceThreshold,
   isProcessing,
+  isSummarizing,
   onProcessNow,
   onResetMic,
+  onSummary,
+  noteCount,
   apiError,
 }) {
-  const [countdown, setCountdown] = useState(60)
-  const countdownRef = useRef(null)
   const transcriptRef = useRef(null)
 
-  // Countdown timer — resets on each process
-  const resetCountdown = useCallback(() => {
-    clearInterval(countdownRef.current)
-    setCountdown(60)
-    countdownRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(countdownRef.current)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }, [])
-
-  useEffect(() => {
-    resetCountdown()
-    return () => clearInterval(countdownRef.current)
-  }, [resetCountdown])
-
-  // Trigger auto-process when countdown hits 0
-  useEffect(() => {
-    if (countdown === 0 && !isProcessing && bufferLength >= 50) {
-      onProcessNow()
-      resetCountdown()
-    }
-  }, [countdown, isProcessing, bufferLength, onProcessNow, resetCountdown])
-
-  // Expose resetCountdown to parent via a ref trick — we use a simpler approach:
-  // parent calls a prop after processing
-  useEffect(() => {
-    if (!isProcessing) {
-      // after processing completes, reset countdown
-      resetCountdown()
-    }
-  }, [isProcessing]) // eslint-disable-line
-
-  // Auto-scroll transcript
   useEffect(() => {
     if (transcriptRef.current) {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight
     }
   }, [transcript])
 
+  const hasEnoughBuffer = bufferWords >= 8
+  const isBusy = isProcessing || isSummarizing
+  const silenceProgress = isTeacherActive && silenceSeconds > 0
+    ? Math.min(silenceSeconds / silenceThreshold, 1)
+    : 0
+  const silenceColor = silenceProgress >= 1
+    ? '#EF4444'
+    : silenceProgress > 0.6
+    ? '#F59E0B'
+    : '#16A34A'
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      padding: '20px 16px',
-      gap: 16,
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '20px 16px', gap: 14 }}>
+
       {/* Live transcript */}
       <div style={{ flex: '0 0 auto' }}>
         <p style={sectionLabel}>LO QUE ESCUCHA EL MICRÓFONO</p>
@@ -77,7 +48,7 @@ export default function RecordingPanel({
             border: '1px solid #2D3F5C',
             borderRadius: 8,
             padding: 12,
-            height: 100,
+            height: 90,
             overflowY: 'auto',
             fontFamily: 'monospace',
             fontSize: 12,
@@ -100,7 +71,7 @@ export default function RecordingPanel({
           className={isTeacherActive ? 'pulse-ring' : ''}
           style={{
             width: '100%',
-            minHeight: 180,
+            minHeight: 150,
             borderRadius: 10,
             border: 'none',
             cursor: 'pointer',
@@ -110,41 +81,67 @@ export default function RecordingPanel({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 8,
+            gap: 6,
             transition: 'background 0.2s, color 0.2s',
             fontFamily: 'inherit',
           }}
         >
-          <span style={{ fontSize: 36 }}>{isTeacherActive ? '🎙️' : '⏸️'}</span>
-          <span style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', lineHeight: 1.2 }}>
-            {isTeacherActive ? 'PROFESORA\nHABLANDO' : 'PAUSADO'}
+          <span style={{ fontSize: 30 }}>{isTeacherActive ? '🎙️' : '⏸️'}</span>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>
+            {isTeacherActive ? 'PROFESORA HABLANDO' : 'PAUSADO'}
           </span>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>
-            {isTeacherActive ? 'Toca para pausar' : 'Toca cuando hable la profesora'}
+          <span style={{ fontSize: 11, opacity: 0.7 }}>
+            {isTeacherActive ? 'Toca o presiona Espacio para pausar' : 'Toca o presiona Espacio para grabar'}
           </span>
         </button>
       </div>
 
-      {/* Controls */}
-      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* Stats */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#64748B' }}>
-            📝 {bufferLength} caracteres capturados
-          </span>
-          {!isProcessing && (
-            <span style={{ fontSize: 12, color: '#64748B' }}>
-              ⏱️ Procesando en {countdown}s
-            </span>
+      {/* Silence detection bar — only when teacher is active */}
+      {isTeacherActive && (
+        <div style={{ flex: '0 0 auto' }}>
+          {isProcessing ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="spin" style={{ fontSize: 13 }}>⚙️</span>
+              <span style={{ fontSize: 12, color: '#F5A623' }}>Generando apuntes...</span>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 11 }}>
+                <span style={{ color: '#64748B' }}>Silencio detectado</span>
+                <span style={{ color: silenceColor, fontWeight: 600 }}>
+                  {silenceSeconds > 0 ? `${silenceSeconds}s` : '—'} / {silenceThreshold}s
+                </span>
+              </div>
+              <div style={{ background: '#0F1729', borderRadius: 4, height: 5, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${silenceProgress * 100}%`,
+                  background: silenceColor,
+                  borderRadius: 4,
+                  transition: 'width 0.8s, background 0.3s',
+                }} />
+              </div>
+              <p style={{ fontSize: 10, color: '#374151', marginTop: 3 }}>
+                Se procesa automáticamente al pausar {silenceThreshold}s
+              </p>
+            </>
           )}
-          {isProcessing && (
-            <span style={{ fontSize: 12, color: '#F5A623' }}>
-              <span className="spin">⚙️</span> Analizando...
+        </div>
+      )}
+
+      {/* Stats + controls */}
+      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: bufferWords > 0 ? '#94A3B8' : '#374151' }}>
+            📝 {bufferWords} palabras capturadas
+          </span>
+          {isSummarizing && (
+            <span style={{ fontSize: 12, color: '#A855F7' }}>
+              <span className="spin" style={{ marginRight: 4 }}>⚙️</span>Resumiendo...
             </span>
           )}
         </div>
 
-        {/* API Error */}
         {apiError && (
           <div style={{
             background: '#2D1515',
@@ -158,20 +155,34 @@ export default function RecordingPanel({
           </div>
         )}
 
-        {/* Buttons */}
         <button
           onClick={onProcessNow}
-          disabled={isProcessing || bufferLength < 50}
+          disabled={isBusy || !hasEnoughBuffer}
           style={{
             ...btnStyle,
-            background: isProcessing || bufferLength < 50 ? '#1A2540' : '#3B82F6',
-            color: isProcessing || bufferLength < 50 ? '#374151' : '#fff',
-            cursor: isProcessing || bufferLength < 50 ? 'not-allowed' : 'pointer',
+            background: isBusy || !hasEnoughBuffer ? '#1A2540' : '#3B82F6',
+            color: isBusy || !hasEnoughBuffer ? '#374151' : '#fff',
+            cursor: isBusy || !hasEnoughBuffer ? 'not-allowed' : 'pointer',
           }}
         >
-          {isProcessing ? (
-            <><span className="spin" style={{ marginRight: 6 }}>⚙️</span> Analizando apuntes...</>
-          ) : '✨ Procesar ahora'}
+          {isProcessing
+            ? <><span className="spin" style={{ marginRight: 6 }}>⚙️</span>Analizando apuntes...</>
+            : '✨ Procesar ahora'}
+        </button>
+
+        <button
+          onClick={onSummary}
+          disabled={isBusy || noteCount === 0}
+          style={{
+            ...btnStyle,
+            background: isBusy || noteCount === 0 ? '#1A2540' : '#7C3AED',
+            color: isBusy || noteCount === 0 ? '#374151' : '#fff',
+            cursor: isBusy || noteCount === 0 ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {isSummarizing
+            ? <><span className="spin" style={{ marginRight: 6 }}>⚙️</span>Generando resumen...</>
+            : '🎯 Resumen de clase'}
         </button>
 
         <button

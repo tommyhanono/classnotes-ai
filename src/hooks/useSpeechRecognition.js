@@ -12,6 +12,7 @@ export function useSpeechRecognition(language = 'es-PA') {
   const isTeacherActiveRef = useRef(false)
   const teacherBufferRef = useRef('')
   const onBufferUpdateRef = useRef(null)
+  const lastSpeechTimeRef = useRef(null)
 
   const buildRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -34,13 +35,13 @@ export function useSpeechRecognition(language = 'es-PA') {
       setTranscript(interim)
       if (isTeacherActiveRef.current && finalText) {
         teacherBufferRef.current += finalText + ' '
+        lastSpeechTimeRef.current = Date.now()
         onBufferUpdateRef.current?.(teacherBufferRef.current)
       }
     }
 
     rec.onend = () => {
       if (isListeningRef.current) {
-        // Auto-restart
         try { rec.start() } catch {}
       }
     }
@@ -79,18 +80,19 @@ export function useSpeechRecognition(language = 'es-PA') {
 
   const clearBuffer = useCallback(() => {
     teacherBufferRef.current = ''
+    lastSpeechTimeRef.current = null
     onBufferUpdateRef.current?.('')
   }, [])
 
   const setTeacherActive = useCallback((active) => {
     isTeacherActiveRef.current = active
+    if (!active) lastSpeechTimeRef.current = null
   }, [])
 
   const setOnBufferUpdate = useCallback((fn) => {
     onBufferUpdateRef.current = fn
   }, [])
 
-  // Pause on tab hide, resume on show
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
@@ -120,7 +122,6 @@ export function useSpeechRecognition(language = 'es-PA') {
     isSupported,
     transcript,
     isListening,
-    teacherBuffer: teacherBufferRef.current,
     start,
     stop,
     reset,
@@ -128,5 +129,6 @@ export function useSpeechRecognition(language = 'es-PA') {
     setTeacherActive,
     setOnBufferUpdate,
     getBuffer: () => teacherBufferRef.current,
+    getLastSpeechTime: () => lastSpeechTimeRef.current,
   }
 }
