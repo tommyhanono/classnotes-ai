@@ -87,6 +87,7 @@ Tu tarea:
 - Si hay una definición, ponla en negrita: **término**: explicación
 - Sé conciso pero no pierdas información importante
 - Corrige errores obvios de transcripción de voz a texto
+- Para ecuaciones o fórmulas, escríbelas en texto plano (ej: 6CO2 + 6H2O + luz → C6H12O6 + 6O2), NUNCA uses LaTeX ni notación $$...$$
 - Responde ÚNICAMENTE con los apuntes en español, formato markdown
 - Si el texto es demasiado corto, incoherente o no contiene contenido educativo, responde exactamente con: FRAGMENTO_INSUFICIENTE`,messages:[{role:"user",content:`Transcripción de la profesora:
 
