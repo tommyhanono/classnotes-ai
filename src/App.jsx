@@ -1,3 +1,4 @@
+import './index.css'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import Setup from './components/Setup.jsx'
 import RecordingPanel from './components/RecordingPanel.jsx'
